@@ -9,7 +9,7 @@ Official repository for **SAM3Count**, a text-prompted open-vocabulary counting 
 > **(1)** an adaptive ROI-guided tiling pipeline for dense image counting, and
 > **(2)** a lightweight multi-modal re-identification tracker for video counting.
 
----
+
 
 ## Highlights
 
@@ -19,7 +19,7 @@ Official repository for **SAM3Count**, a text-prompted open-vocabulary counting 
 * **Video counting** via a SAM3-based re-identification tracker that reduces ID fragmentation, identity switches, and double counting.
 * Strong results on **FSCD-147, ShanghaiTech, CARPK, PixMo, CountBench, TAO-Count, and Penguins**.
 
----
+
 
 ## Overview
 
@@ -28,7 +28,7 @@ Official repository for **SAM3Count**, a text-prompted open-vocabulary counting 
 * **Images:** a two-stage density-aware pipeline that uses a full-image SAM3 pass for sparse scenes and triggers **ROI-guided adaptive tiling** for dense scenes.
 * **Videos:** a **multi-modal re-identification tracker** that maintains a consistent identity space on top of SAM3’s raw track IDs using appearance, motion, spatial, and temporal cues.
 
----
+
 
 ## Architecture
 
@@ -48,7 +48,7 @@ The image pipeline operates in two stages:
 
 The video pipeline augments SAM3 with a lightweight **multi-modal re-identification tracker** which is robust to occlusions, object re-entry, and SAM3 ID fragmentation.
 
----
+
 
 ## Installation
 
@@ -82,7 +82,7 @@ mkdir -p checkpoints
 Fine-tuned SAM3Count checkpoint for dense image counting is found [here](https://drive.google.com/file/d/PLACEHOLDER/view?usp=sharing)
 
 
----
+
 
 ## Repository Structure
 
@@ -100,7 +100,7 @@ SAM3Count/
 └── README.md
 ```
 
----
+
 
 ## Demo
 
@@ -115,7 +115,7 @@ python sam3count_images.py --image_path images/demo.jpg --input_text "bird" --sa
 ```bash
 python sam3count_videos.py --video_dir video --input_text "car" --output_dir outputs 
 ```
----
+
 
 ## Reproducing Results
 
@@ -167,7 +167,7 @@ python scripts/evaluate_tao_count.py --output_file outputs/tao_count/predictions
 python scripts/evaluate_counting.py --ground_truth data/VideoCount/TAO-Count/anno/TAO-count-gt.json --predicted outputs/tao_count/predictions.json  --parent_dir data/VideoCount/TAO-Count/frames
 ```
 
----
+
 
 ## Datasets
 
@@ -200,7 +200,7 @@ data/
     └── TAO-Count/
 ```
 
----
+
 
 ## Results
 
@@ -240,14 +240,14 @@ data/
 
 When comparing against prior methods, please note that some baselines use **exemplars** while SAM3Count is designed around a **text-only** interface.
 
----
+
 
 ## Citation
 
 If you find this repository useful, please cite our paper.
 
 
----
+
 
 ## Acknowledgements
 
@@ -255,7 +255,6 @@ This repository builds on the official **SAM3** codebase and the recent literatu
 
 We thank the open-source and research communities whose work made this project possible.
 
----
 
 ## License
 
