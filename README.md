@@ -1,14 +1,17 @@
+<div align="center">
+
 # [CVPRW' 26 Oral] SAM3Count: Zero-Shot Open Vocabulary Counting in Images and Videos
 
-**Joana Konadu Owusu, Shivanand Venkanna Sheshappanavar**
-Geometric Intelligence Research Lab, University of Wyoming
+**Joana Konadu Owusu & Shivanand Venkanna Sheshappanavar**  
+Geometric Intelligence Research Lab , University of Wyoming
 
-Official repository for **SAM3Count**, a text-prompted open-vocabulary counting framework for **images** and **videos** built on top of **SAM3**.
+</div>
 
-> SAM3Count extends SAM3 with two task-specific modules:
-> **(1)** an adaptive ROI-guided tiling pipeline for dense image counting, and
-> **(2)** a lightweight multi-modal re-identification tracker for video counting.
+**SAM3Count**, is a text-prompted open-vocabulary counting framework for **images** and **videos** built on top of **SAM3**.
 
+It extends SAM3 with two task-specific modules:
+ * **(1)** an adaptive ROI-guided tiling pipeline for dense image counting, and
+ * **(2)** a lightweight multi-modal re-identification tracker for video counting.
 
 
 ## Highlights
@@ -17,8 +20,6 @@ Official repository for **SAM3Count**, a text-prompted open-vocabulary counting 
 * **Text-only interface** for counting arbitrary object categories without manual exemplars.
 * **Image counting** via density-aware ROI-guided adaptive tiling for dense scenes.
 * **Video counting** via a SAM3-based re-identification tracker that reduces ID fragmentation, identity switches, and double counting.
-* Strong results on **FSCD-147, ShanghaiTech, CARPK, PixMo, CountBench, TAO-Count, and Penguins**.
-
 
 
 ## Overview
@@ -59,7 +60,7 @@ SAM3Count depends on the official **SAM3** repository and checkpoint. The setup 
 ```bash
 conda create -n sam3count python=3.12 -y
 conda activate sam3count
-
+pip install torch==2.7.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
 ```
 
 ### 2. Clone the official SAM3 repository
@@ -68,8 +69,13 @@ Place the official SAM3 repository inside the project root so that the folder na
 
 ```bash
 git clone https://github.com/facebookresearch/sam3.git
+cd sam3
+pip install -e .
+pip install -e ".[notebooks]"
+pip install -e ".[train,dev]"
 ```
 Follow the installation instructions of SAM3 [here](https://github.com/facebookresearch/sam3/blob/main/README.md)
+and check the official repo for any FAQS with regard to SAM3.
 
 ### 3. Download checkpoints
 
@@ -79,7 +85,7 @@ Download the official SAM3 checkpoint [here](https://huggingface.co/facebook/sam
 mkdir -p checkpoints
 ```
 
-Fine-tuned SAM3Count checkpoint for dense image counting is found [here](https://drive.google.com/file/d/PLACEHOLDER/view?usp=sharing)
+Fine-tuned SAM3Count checkpoint for dense image counting is found [here](https://drive.google.com/file/d/1uSpEeM9l9SN_Q_W-CJqYy75mQ-O75HpL/view?usp=drive_link)
 
 
 
@@ -178,8 +184,6 @@ Following prior open-vocabulary counting work, we evaluate SAM3Count on a divers
 * **FSCD-147 / FSC-147** — few-shot style counting benchmark with strong density variation.
 * **ShanghaiTech Part A / Part B** — crowd counting benchmarks covering highly dense and relatively sparse scenes.
 * **CARPK** — car counting benchmark for overhead imagery.
-* **PixMo-Count** — open-world counting benchmark with natural-language prompts.
-* **CountBench** — benchmark for counting under open-vocabulary prompt settings.
 * **OmniCount-191** — additional image-counting benchmark used in our evaluation scripts.
 
 ### Video datasets
