@@ -206,11 +206,10 @@ For dataset download and preprocessing instructions, please see [DATASETS.md](DA
 
 ## Citation
 
-If you find this repository useful, please cite our paper.
-
+If you find SAM3Count please cite our work and give it a :star:
 
 
 ## Acknowledgements
 
-SAM3Count is built on top of **SAM3** by Meta FAIR and the recent literature on open-vocabulary counting in images and videos.
+SAM3Count is built on top of **[SAM3](https://github.com/facebookresearch/sam3)** by Meta FAIR and the recent literature on open-vocabulary counting in images and videos. And we used VideoCount from **[CountVID](https://github.com/niki-amini-naieni/CountVid)** to test SAM3Count's video counting capabilities.
 
