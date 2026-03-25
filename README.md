@@ -174,37 +174,8 @@ python scripts/evaluate_counting.py --ground_truth data/VideoCount/TAO-Count/ann
 ```
 
 
-
 ## Datasets
-
-Following prior open-vocabulary counting work, we evaluate SAM3Count on a diverse set of image and video benchmarks.
-
-### Image datasets
-
-* **FSCD-147 / FSC-147** — few-shot style counting benchmark with strong density variation.
-* **ShanghaiTech Part A / Part B** — crowd counting benchmarks covering highly dense and relatively sparse scenes.
-* **CARPK** — car counting benchmark for overhead imagery.
-* **OmniCount-191** — additional image-counting benchmark used in our evaluation scripts.
-
-### Video datasets
-
-* **TAO-Count** — large-scale open-vocabulary video counting benchmark.
-
-Please follow the official dataset websites, licenses, and terms of use when downloading and using the data.
-
-A recommended layout is:
-
-```bash
-data/
-├── FSCD-147/
-├── ShanghaiTech/
-├── CARPK/
-├── OmniCount-191/
-└── VideoCount/
-    └── TAO-Count/
-```
-
-
+For dataset download and preprocessing instructions, please see [DATASETS.md](DATASETS.md).
 
 ## Results
 
@@ -227,7 +198,7 @@ data/
 | Method    | Benchmark       | MAE↓ | RMSE↓ |
 | --------- | --------------- | ---- | ----- |
 | SAM3Count | CARPK           | 3.11 | 5.60  |
-| SAM3Count | OmniCount-Fruit | TBD  | TBD   |
+| SAM3Count | OmniCount-Fruit | 0.43 | 0.93  |
 
 > **Note:** OmniCount-Fruit results will be added once we finalize and verify the evaluation numbers for the released setup.
 
@@ -237,13 +208,10 @@ data/
 | --------- | --------- | ---- | ----- |
 | SAM3Count | TAO-Count | 0.78 | 1.63  |
 
-## Notes on Zero-Shot vs Fine-Tuned Results
-
-* **SAM3Count** refers to the **training-free, text-only** setting.
-* **SAM3Count (ft)** refers to a **fine-tuned** variant used primarily for dense image benchmarks.
+* **SAM3Count** refers to the **training-free, setting.
+* **SAM3Count (ft)** refers to a **fine-tuned** variant used primarily for benchmarks (FSCD147 and ShangaiTech) with dense scenes.
 
 When comparing against prior methods, please note that some baselines use **exemplars** while SAM3Count is designed around a **text-only** interface.
-
 
 
 ## Citation
@@ -252,14 +220,7 @@ If you find this repository useful, please cite our paper.
 
 
 
-
 ## Acknowledgements
 
-This repository builds on the official **SAM3** codebase and the recent literature on open-vocabulary counting in images and videos.
+SAM3Count is built on top of **SAM3** by Meta FAIR and the recent literature on open-vocabulary counting in images and videos.
 
-We thank the open-source and research communities whose work made this project possible.
-
-
-## License
-
-Please add the intended license for this repository here.
