@@ -3,8 +3,8 @@ We evaluate SAM3Count on a diverse set of image and video benchmarks.
 ### Image datasets 
 * **FSCD-147 / FSC-147** — few-shot style counting benchmark with strong density variation.
 * **ShanghaiTech Part A / Part B** — crowd counting benchmarks covering highly dense and relatively sparse scenes.
-* **CARPK** — car counting benchmark for overhead imagery.
-* **OmniCount-191** — additional image-counting benchmark used in our evaluation scripts.
+* **CARPK** — car counting benchmark for aerial drone imagery.
+* **OmniCount-191** — multi class image-counting benchmark used in our evaluation scripts.
   
 ### Video datasets
 * **TAO-Count** — large-scale open-vocabulary video counting benchmark. 
@@ -58,7 +58,6 @@ data/ShanghaiTech/
         └── gt_json/
 ```
 
-
 ## 3. CARPK
 
 * Download the [CARPK](https://lafi.github.io/LPN/) dataset
@@ -87,26 +86,31 @@ data/OmniCount-191/
         └── .... # images
 ```
 
-
 ## 5. TAO-Count
 
-* Download the TAO validation videos from [here](https://example.com/tao-count-download). You can also follow the directions at this link to download the TAO-Count videos if the first link does not work for you.
+* Follow the instructions in [CountVid]() official repository to download the TAO-Count videos.(Note: the initial TAO-Count used for evaluation by CountVid did not include the AVA, HACS split so we did not include it in the initial version in order to compare it to CountVid. Subsequent future works will include evaluation of all the splits.)
+* If the first link does not work for you, download the TAO validation video frames from [here](https://huggingface.co/datasets/chengyenhsieh/TAO-Amodal/tree/main/frames/val).
+* And download the ground truth annotations[here](https://drive.google.com/file/d/1mps8WiINFRedwBclob2914m3wO9XEMWT/view?usp=drive_link). 
 
-### Expected structure
+* Organise files as follows:
 
 ```bash
 data/VideoCount/
 └── TAO-Count/
-    ├── anno/
+    ├── annotations/
     │   └── TAO-count-gt.json
     └── frames/
+        └── val/
+            ├── ArgoVerse
+            ├── BDD
+            ├── Charades
+            ├── LaSOT
+            └── YFCC100M
 ```
-
-
 ## 6. Penguins
 
-Download the Penguins dataset from [here](https://example.com/penguins-download). You can also follow the instructions from the CountVid repository to download the TAO-Count and Penguins video dataset if the first links provided does not work for you.
-
+* Download the Penguins dataset from [here](https://github.com/niki-amini-naieni/CountVid?tab=readme-ov-file#dataset-download) from their VideoCount dataset. 
+* Organise files as follows:
 
 ```bash
 data/VideoCount/
@@ -114,5 +118,8 @@ data/VideoCount/
     ├── anno/
     │   └── penguins-count-gt.json
     └── frames/
+          ├── penguins_1
+          ├── penguins_2
+          └── penguins_3
 ```
 
