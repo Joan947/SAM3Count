@@ -1,30 +1,23 @@
-<div align="center">
 
 # [CVPRW' 26 Oral] SAM3Count: Zero-Shot Open Vocabulary Counting in Images and Videos
-
-**Joana Konadu Owusu & Shivanand Venkanna Sheshappanavar**  
-Geometric Intelligence Research Lab , University of Wyoming
-
+<div>
+  <strong>Joana Konadu Owusu &amp; Shivanand Venkanna Sheshappanavar</strong><br>
+  Geometric Intelligence Research Lab, University of Wyoming
 </div>
 
-**SAM3Count**, is a text-prompted open-vocabulary counting framework for **images** and **videos** built on top of **SAM3**.
-
-It extends SAM3 with two task-specific modules:
- * **(1)** an adaptive ROI-guided tiling pipeline for dense image counting, and
- * **(2)** a lightweight multi-modal re-identification tracker for video counting.
-
+---
 
 ## Highlights
 
-* **CVPRW 2026 Oral** paper on zero-shot open-vocabulary counting in images and videos.
-* **Text-only interface** for counting arbitrary object categories without manual exemplars.
-* **Image counting** via density-aware ROI-guided adaptive tiling for dense scenes.
-* **Video counting** via a SAM3-based re-identification tracker that reduces ID fragmentation, identity switches, and double counting.
-
+* **SAM3Count** has been accepted at WiCV @ CVPR'26 and selected for Oral presentation.
+* Full fine-tuning code and other dataset evaluations will be released soon.
+* **Inference** and **demo** code for some of the evaluation benchmarks has been released.
+  
 
 ## Overview
+**SAM3Count**, is a text-prompted open-vocabulary counting framework for **images** and **videos** built on top of **SAM3**.
 
-**SAM3Count** builds on the segmentation and tracking capabilities of **SAM3** and introduces two additions tailored to counting:
+It introduces two additions tailored to counting:
 
 * **Images:** a two-stage density-aware pipeline that uses a full-image SAM3 pass for sparse scenes and triggers **ROI-guided adaptive tiling** for dense scenes.
 * **Videos:** a **multi-modal re-identification tracker** that maintains a consistent identity space on top of SAM3’s raw track IDs using appearance, motion, spatial, and temporal cues.
@@ -39,15 +32,15 @@ It extends SAM3 with two task-specific modules:
 
 The image pipeline operates in two stages:
 
-#### Stage 1: Full-image inference and density decision
+* Stage 1: Full-image inference and density decision
 
-#### Stage 2: ROI-guided adaptive tiling
+* Stage 2: ROI-guided adaptive tiling
 
 ### SAM3Count for Videos
 
 <img width="1408" height="869" alt="video_archi_sam3count" src="https://github.com/user-attachments/assets/b72cd55a-8a8e-47a9-8884-fa9e2905ac1c" />
 
-The video pipeline augments SAM3 with a lightweight **multi-modal re-identification tracker** which is robust to occlusions, object re-entry, and SAM3 ID fragmentation.
+* The video pipeline augments SAM3 with a lightweight **multi-modal re-identification tracker** which is robust to occlusions, object re-entry, and SAM3 ID fragmentation.
 
 
 
@@ -128,7 +121,7 @@ python sam3count_videos.py --video_dir video --input_text "car" --output_dir out
 ### PixMo evaluation
 
 ```bash
-python scripts/evaluate_pixmo.py --benchmark_file data/pixmo_test.json --output_file outputs/pixmo/predictions.json --metrics_file outputs/pixmo/metrics.json \
+python scripts/evaluate_pixmo.py --benchmark_file data/pixmo_test.json --output_file outputs/pixmo/predictions.json --metrics_file outputs/pixmo/metrics.json 
 
 ```
 
@@ -154,8 +147,7 @@ python scripts/evaluate_shanghaitech.py --ann_json_dir data/ShanghaiTech/part_A/
 Part B
 
 ```bash
-python scripts/evaluate_shanghaitech_multi_gpu.py \
-  --ann_json_dir data/ShanghaiTech/part_B/test_data/gt_json --images_dir data/ShanghaiTech/part_B/test_data/images --num_gpus 4 --output_json outputs/shanghai/partB_results.json --summary_json outputs/shanghai/partB_summary.json --temp_dir ./temp_shanghai_partB_test 
+python scripts/evaluate_shanghaitech_multi_gpu.py --ann_json_dir data/ShanghaiTech/part_B/test_data/gt_json --images_dir data/ShanghaiTech/part_B/test_data/images --num_gpus 4 --output_json outputs/shanghai/partB_results.json --summary_json outputs/shanghai/partB_summary.json --temp_dir ./temp_shanghai_partB_test 
 ```
 
 ### CARPK evaluation
@@ -200,7 +192,6 @@ For dataset download and preprocessing instructions, please see [DATASETS.md](DA
 | SAM3Count | CARPK           | 3.11 | 5.60  |
 | SAM3Count | OmniCount-Fruit | 0.43 | 0.93  |
 
-> **Note:** OmniCount-Fruit results will be added once we finalize and verify the evaluation numbers for the released setup.
 
 ### Video benchmarks
 
@@ -208,10 +199,9 @@ For dataset download and preprocessing instructions, please see [DATASETS.md](DA
 | --------- | --------- | ---- | ----- |
 | SAM3Count | TAO-Count | 0.78 | 1.63  |
 
-* **SAM3Count** refers to the **training-free, setting.
+* **SAM3Count** refers to the training-free, setting.
 * **SAM3Count (ft)** refers to a **fine-tuned** variant used primarily for benchmarks (FSCD147 and ShangaiTech) with dense scenes.
 
-When comparing against prior methods, please note that some baselines use **exemplars** while SAM3Count is designed around a **text-only** interface.
 
 
 ## Citation
