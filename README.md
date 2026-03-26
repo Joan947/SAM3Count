@@ -106,36 +106,36 @@ SAM3Count/
 ### Image demo
 
 ```bash
-python sam3count_images.py --image_path images/demo.jpg --input_text "bird" --save_vis --show_id
+python sam3count_images.py --image_path examples/images/demo.jpg --input_text "bird" --save_vis --show_id
 ```
 
 ### Video demo
 
 ```bash
-python sam3count_videos.py --video_dir video --input_text "car" --output_dir outputs 
+python sam3count_videos.py --video_dir examples/video --input_text "car" --output_dir outputs 
 ```
 
 
 ## Reproducing Results
 
-### PixMo evaluation
+<!-- ### PixMo evaluation
 
 ```bash
 python scripts/evaluate_pixmo.py --benchmark_file data/pixmo_test.json --output_file outputs/pixmo/predictions.json --metrics_file outputs/pixmo/metrics.json 
 
-```
+``` -->
 
-### FSCD-147 evaluation
+<!-- ### FSCD-147 evaluation
 
 ```bash
 python scripts/evaluate_fscd147.py --json_path fscd147/instances_val_remapped.json --images_dir data/FSC147_384_V2/images_384_VarV2 --num_gpus 2 
-```
-
+``` -->
+<!-- 
 ### OmniCount evaluation
 
 ```bash
 python scripts/evaluate_omnicount.py --json_path data/OmniCount-191/Fruits/test/_annotations.coco.json --images_dir data/OmniCount-191/Fruits/test --num_gpus 4 
-```
+``` -->
 
 ### ShanghaiTech evaluation
 
@@ -147,7 +147,7 @@ python scripts/evaluate_shanghaitech.py --ann_json_dir data/ShanghaiTech/part_A/
 Part B
 
 ```bash
-python scripts/evaluate_shanghaitech_multi_gpu.py --ann_json_dir data/ShanghaiTech/part_B/test_data/gt_json --images_dir data/ShanghaiTech/part_B/test_data/images --num_gpus 4 --output_json outputs/shanghai/partB_results.json --summary_json outputs/shanghai/partB_summary.json --temp_dir ./temp_shanghai_partB_test 
+python scripts/evaluate_shanghaitech.py --ann_json_dir data/ShanghaiTech/part_B/test_data/gt_json --images_dir data/ShanghaiTech/part_B/test_data/images --num_gpus 4 --output_json outputs/shanghai/partB_results.json --summary_json outputs/shanghai/partB_summary.json --temp_dir ./temp_shanghai_partB_test 
 ```
 
 ### CARPK evaluation
@@ -157,14 +157,20 @@ python scripts/evaluate_carpk.py --dataset_root data/CARPK/data --split test --n
 
 ```
 
-### TAO-Count evaluation
+<!-- ### TAO-Count evaluation
 
 ```bash
-python scripts/evaluate_tao_count.py --output_file outputs/tao_count/predictions.json --data_dir data/VideoCount/TAO-Count --downsample_factor 2.0
+python scripts/evaluate_tao_count.py --output_file outputs/tao_count/predictions.json --data_dir data/TAO-Count --downsample_factor 2.0
 
 python scripts/evaluate_counting.py --ground_truth data/VideoCount/TAO-Count/anno/TAO-count-gt.json --predicted outputs/tao_count/predictions.json  --parent_dir data/VideoCount/TAO-Count/frames
-```
+``` -->
 
+### Penguin evaluation
+```bash
+python scripts/eval_penguins.py --output_file outputs/penguin/predictions.json --data_dir data/Penguins 
+
+python evaluate_counting_accuracy.py --ground_truth data/Penguins/anno/penguins-count-gt.json --predicted outputs/penguin/predictions.json --parent_dir data/Penguins/frames
+```
 
 ## Datasets
 For dataset download and preprocessing instructions, please see [DATASETS.md](DATASETS.md).
@@ -198,6 +204,7 @@ For dataset download and preprocessing instructions, please see [DATASETS.md](DA
 | Method    | Benchmark | MAE↓ | RMSE↓ |
 | --------- | --------- | ---- | ----- |
 | SAM3Count | TAO-Count | 0.78 | 1.63  |
+| SAM3Count | Penguin   |  2.3 |  3.1  |
 
 * **SAM3Count** refers to the training-free, setting.
 * **SAM3Count (ft)** refers to a **fine-tuned** variant used primarily for benchmarks (FSCD147 and ShangaiTech) with dense scenes.
