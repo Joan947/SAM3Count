@@ -83,7 +83,7 @@ Fine-tuned SAM3Count checkpoint for dense image counting is found [here](https:/
 
 
 
-## Repository Structure
+<!-- ## Repository Structure
 
 ```bash
 SAM3Count/
@@ -97,7 +97,7 @@ SAM3Count/
 ├── data/    # datasets
 ├── sam3/    # official SAM3 repo
 └── README.md
-```
+``` -->
 
 
 
