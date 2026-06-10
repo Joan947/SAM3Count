@@ -213,10 +213,19 @@ For dataset download and preprocessing instructions, please see [DATASETS.md](DA
 
 ## Citation
 
-If you find SAM3Count please cite our work and give it a :star:
-
+If you find SAM3Count usefuls please cite our work and give it a :star:
+```bibtex
+@InProceedings{Owusu_2026_CVPR,
+    author    = {Owusu, Joana Konadu and Sheshappanavar, Shivanand Venkanna},
+    title     = {SAM3Count for Zero-Shot Open Vocabulary Counting in Images and Videos},
+    booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) Workshops},
+    month     = {June},
+    year      = {2026},
+    pages     = {581-591}
+}
+```
 
 ## Acknowledgements
 
-SAM3Count is built on top of **[SAM3](https://github.com/facebookresearch/sam3)** by Meta FAIR and the recent literature on open-vocabulary counting in images and videos. And we used VideoCount from **[CountVID](https://github.com/niki-amini-naieni/CountVid)** to test SAM3Count's video counting capabilities.
+SAM3Count is built on top of **[SAM3](https://github.com/facebookresearch/sam3)** by Meta FAIR and the recent literature on open-vocabulary counting in images and videos. And we used VideoCount dataset from **[CountVID](https://github.com/niki-amini-naieni/CountVid)** to test SAM3Count's video counting capabilities.
 

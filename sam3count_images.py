@@ -1,29 +1,10 @@
 #!/usr/bin/env python3
 
 """
-SAM3 Object Counting with SMART DENSITY-AWARE ADAPTIVE TILING
+SAM3 image counting with density-aware tiling.
 
-IMPROVED MULTI-FACTOR DENSITY CALCULATION:
-Distinguishes between:
-- 6 large objects covering 60% → SPARSE (no tiling)  
-- 100 small objects covering 60% → DENSE (tiling applied)
-
-THREE FACTORS:
-1. Coverage ratio: Total area occupied by bounding boxes
-2. Object count: Number of detected objects (normalized)
-3. Average object size: Size of each object relative to image
-
-TILING DECISION RULES:
-- >25 objects → Use tiling
-- High coverage (>50%) + small objects (<5% avg) → Use tiling  
-- Very small objects (<1% avg) → Use tiling
-- Otherwise → No tiling
-
-WORKFLOW:
-1. Run SAM3 on full image (no tiling)
-2. Calculate smart multi-factor density
-3. If dense: Apply semantic-aware tiling and re-predict
-4. Apply semantic-aware NMS
+The script first runs SAM3 on the full image, checks how dense the detections
+look, and only switches to tiled prediction when the scene needs it.
 """
 
 import os
@@ -45,22 +26,18 @@ from sam3.sam3.model.sam3_image_processor import Sam3Processor
 from sam3.sam3.model.box_ops import box_xywh_to_cxcywh, box_cxcywh_to_xyxy
 from sam3.sam3.visualization_utils import normalize_bbox
 
-# ============================================================
-# Configuration
-# ============================================================
+# Basic settings
 USE_MERGING = False
 STRICT_NMS_THRESHOLD = 0.23
 ENABLE_VISUALIZATION = True
 
 
 
-# ====================================================================
-# Adaptive Tiling Calculator
-# ====================================================================
+# Adaptive tile sizing
 def calculate_adaptive_tile_params(
-    image_width: int,
-    image_height: int,
-    tiling_rule: str = "MEDIUM",   # ← was: prompt_type: str = "INDIVIDUAL"
+    img_w: int,
+    img_h: int,
+    tiling_rule: str = "MEDIUM",
     min_tile_size: int = 97,
     max_tile_size: int = 1024,
 ) -> Tuple[int, int]:
@@ -75,68 +52,46 @@ def calculate_adaptive_tile_params(
     }
     config = configs.get(tiling_rule, configs["MEDIUM"])
 
-    # Calculate tile size based on grid configuration
-    tile_width = image_width / config['cols']
-    tile_height = image_height / config['rows']
+    tile_w = img_w / config['cols']
+    tile_h = img_h / config['rows']
 
-    # Use the larger dimension to ensure coverage
-    tile_size = int(max(tile_width, tile_height))
+    tile_size = int(max(tile_w, tile_h))
 
-    # Clamp to min/max bounds
     tile_size = max(min_tile_size, min(tile_size, max_tile_size))
-
-    # Calculate overlap
     overlap = int(tile_size * config['overlap_ratio'])
 
-    # Calculate actual grid that will be created
     stride = tile_size - overlap
-    actual_cols = int(np.ceil(image_width / stride))
-    actual_rows = int(np.ceil(image_height / stride))
-    actual_tiles = actual_cols * actual_rows
+    cols = int(np.ceil(img_w / stride))
+    rows = int(np.ceil(img_h / stride))
+    n_tiles = cols * rows
 
     print(f"\n{'='*70}")
-    print(f"🤖 ADAPTIVE TILING CONFIGURATION")
+    print("Adaptive tiling configuration")
     print(f"{'='*70}")
-    print(f"   Image size: {image_width}x{image_height} pixels")
+    print(f"   Image size: {img_w}x{img_h} pixels")
     print(f"   Strategy: {config['description']}")
     print(f"   ")
     print(f"   Target grid: {config['cols']} cols x {config['rows']} rows")
     print(f"   Overlap ratio: {config['overlap_ratio']*100:.0f}%")
     print(f"   ")
-    print(f"   📐 Calculated tile size: {tile_size}px")
-    print(f"   🔗 Calculated overlap: {overlap}px")
-    print(f"   📊 Actual grid: {actual_cols} cols x {actual_rows} rows → {actual_tiles} tiles")
+    print(f"   Tile size: {tile_size}px")
+    print(f"   Overlap: {overlap}px")
+    print(f"   Actual grid: {cols} cols x {rows} rows, {n_tiles} tiles")
     print(f"{'='*70}\n")
 
     return tile_size, overlap
 
 
 
-# ============================================================
-# SMART Multi-Factor Density Calculation (NEW & IMPROVED)
-# ============================================================
+# Density check
 
 def calculate_density_smart(
     boxes: List[np.ndarray], 
-    image_width: int, 
-    image_height: int
+    img_w: int, 
+    img_h: int
 ) -> Tuple[float, bool, Dict[str, Any]]:
     """
-    IMPROVED density calculation with THREE factors
-
-    Correctly distinguishes:
-    - 6 large objects covering 60% → LOW density → No tiling
-    - 100 small objects covering 60% → HIGH density → Use tiling
-
-    Args:
-        boxes: List of [x1, y1, x2, y2] bounding boxes
-        image_width: Image width in pixels
-        image_height: Image height in pixels
-
-    Returns:
-        density_score: Combined metric (0.0 to 1.0+)
-        use_tiling: Boolean decision
-        metrics: Dict with detailed breakdown
+    Estimate scene density from coverage, count, and average object size.
     """
     if len(boxes) == 0:
         return 0.0, False, {
@@ -151,94 +106,72 @@ def calculate_density_smart(
             'use_tiling': False,
         }
 
-    image_area = image_width * image_height
+    img_area = img_w * img_h
 
-    # Factor 1: Coverage ratio (total box area / image area)
-    total_box_area = 0
+    box_area_sum = 0
     for box in boxes:
         x1, y1, x2, y2 = box
-        width = max(0, x2 - x1)
-        height = max(0, y2 - y1)
-        box_area = width * height
-        total_box_area += box_area
+        w = max(0, x2 - x1)
+        h = max(0, y2 - y1)
+        box_area_sum += w * h
 
-    coverage = total_box_area / image_area
+    coverage = box_area_sum / img_area
 
-    # Factor 2: Object count (normalized, maxes at 50 objects)
-    object_count = len(boxes)
-    object_count_score = min(object_count / 50.0, 1.0)
+    obj_count = len(boxes)
+    count_score = min(obj_count / 50.0, 1.0)
 
-    # Factor 3: Average object size (smaller objects = higher density)
-    avg_box_size = total_box_area / object_count
-    avg_size_ratio = avg_box_size / image_area
+    avg_box_area = box_area_sum / obj_count
+    avg_size_ratio = avg_box_area / img_area
 
-    # Size score: 1.0 for small objects, 0.0 for large objects
-    # Objects >10% of image get score ~0, objects <1% get score ~1
     size_score = 1.0 - min(avg_size_ratio / 0.1, 1.0)
+    dens_score = 0.3 * coverage + 0.5 * count_score + 0.2 * size_score
 
-    # Combined density with weights:
-    # 30% coverage, 50% object count, 20% size
-    density_score = 0.3 * coverage + 0.5 * object_count_score + 0.2 * size_score
-
-    # ========================================
-    # TILING DECISION LOGIC
-    # ========================================
     use_tiling = False
     tiling_rule = "NONE"
-    decision_reason = ""
+    reason = ""
 
-    if object_count > 90:
-        # Rule 1: Many objects always benefit from tiling
+    if obj_count > 90:
         use_tiling = True
-        decision_reason = f"Many objects ({object_count} > 90)"
+        reason = f"Many objects ({obj_count} > 90)"
         tiling_rule = "LARGE"
 
-    # if object_count <= 3:
-    #         # Rule 1: Many objects always benefit from tiling
-    #         use_tiling = True
-    #         decision_reason = f"Less than normal for this benchmark `({object_count} < 3) may be uncertain"
-    #         tiling_rule = "LARGE"
-
     elif coverage > 0.4 and avg_size_ratio < 0.02:
-        # Rule 2: High coverage + small objects = dense scene
         use_tiling = True
-        decision_reason = f"High coverage ({coverage:.1%}) with small objects (avg {avg_size_ratio:.1%})"
+        reason = f"High coverage ({coverage:.1%}) with small objects (avg {avg_size_ratio:.1%})"
         tiling_rule = "MEDIUM"
 
-    elif density_score > 0.7 and avg_size_ratio < 0.01:
-        # Rule 3: Very small objects need tiling
+    elif dens_score > 0.7 and avg_size_ratio < 0.01:
         use_tiling = True
-        decision_reason = f"Very small objects (avg {avg_size_ratio:.2%} of image)"
+        reason = f"Very small objects (avg {avg_size_ratio:.2%} of image)"
         tiling_rule = "SMALL"
 
     else:
-        # No tiling needed
         use_tiling = False
         tiling_rule = "NONE"
-        if object_count <= 90:
-            decision_reason = f"Few large objects ({object_count}, avg {avg_size_ratio:.1%})"
+        if obj_count <= 90:
+            reason = f"Few large objects ({obj_count}, avg {avg_size_ratio:.1%})"
         elif avg_size_ratio > 0.1:
-            decision_reason = f"Large objects (avg {avg_size_ratio:.1%} each)"
+            reason = f"Large objects (avg {avg_size_ratio:.1%} each)"
         else:
-            decision_reason = f"Moderate density ({object_count} objects)"
+            reason = f"Moderate density ({obj_count} objects)"
 
     metrics = {
         'coverage': float(coverage),
-        'object_count': int(object_count),
+        'object_count': int(obj_count),
         'avg_object_size_ratio': float(avg_size_ratio),
-        'density_score': float(density_score),
-        'object_count_score': float(object_count_score),
+        'density_score': float(dens_score),
+        'object_count_score': float(count_score),
         'size_score': float(size_score),
-        'decision': decision_reason,
+        'decision': reason,
         'use_tiling': use_tiling,
         "tiling_rule": tiling_rule,
     }
 
-    return float(density_score), use_tiling, metrics
+    return float(dens_score), use_tiling, metrics
 
 
 class VisualizationHelper:
-    """Helper class for visualizing the tiling and detection process"""
+    """Creates debug images for tiling and detections."""
 
     def __init__(self, output_dir="visualization_semantic_aware"):
         self.output_dir = output_dir
@@ -281,7 +214,7 @@ class VisualizationHelper:
         save_path = os.path.join(self.output_dir, filename)
         plt.savefig(save_path, bbox_inches='tight', dpi=150)
         plt.close()
-        print(f"   ✓ Saved: {save_path}")
+        print(f"   Saved: {save_path}")
 
     def visualize_tile_detections(self, image_pil, tiles, all_tile_detections,
                                  filename_prefix="02_tile_detections"):
@@ -331,8 +264,8 @@ class VisualizationHelper:
         save_path = os.path.join(self.output_dir, f"{filename_prefix}.png")
         plt.savefig(save_path, bbox_inches='tight', dpi=150)
         plt.close()
-        print(f"   ✓ Saved: {save_path}")
-        print(f"   → Total detections across all tiles: {total_detections}")
+        print(f"   Saved: {save_path}")
+        print(f"   Total detections across all tiles: {total_detections}")
 
     def visualize_global_detections_before_merge(self, image_pil, global_detections,
                                                 filename="02b_all_detections_global.png"):
@@ -357,7 +290,7 @@ class VisualizationHelper:
         save_path = os.path.join(self.output_dir, filename)
         plt.savefig(save_path, bbox_inches='tight', dpi=150)
         plt.close()
-        print(f"   ✓ Saved: {save_path}")
+        print(f"   Saved: {save_path}")
 
     def visualize_merging_process(self, image_pil, detections_before_nms,
                                  detections_after_nms, filename="03_merging_process.png"):
@@ -400,7 +333,7 @@ class VisualizationHelper:
         save_path = os.path.join(self.output_dir, filename)
         plt.savefig(save_path, bbox_inches='tight', dpi=150)
         plt.close()
-        print(f"   ✓ Saved: {save_path}")
+        print(f"   Saved: {save_path}")
 
     def visualize_final_result(self, image_pil, final_detections,
                               filename="04_final_result.png"):
@@ -430,16 +363,14 @@ class VisualizationHelper:
         save_path = os.path.join(self.output_dir, filename)
         plt.savefig(save_path, bbox_inches='tight', dpi=150)
         plt.close()
-        print(f"   ✓ Saved: {save_path}")
+        print(f"   Saved: {save_path}")
 
         print(f"\n{'='*60}")
         print(f"VISUALIZATION COMPLETE!")
         print(f"Final count: {len(final_detections)} objects")
         print(f"{'='*60}\n")
 
-# ============================================================
-# Density-Aware Tiled Detector
-# ============================================================
+# Tiled detection
 
 
 class DensityAwareTiledDetector:
@@ -474,10 +405,9 @@ class DensityAwareTiledDetector:
         tiles = []
         stride = self.tile_size - self.overlap
 
-        # Safety guard: avoid zero/negative stride
         if stride <= 0:
             stride = max(1, self.tile_size // 2)
-            print(f"  ⚠️ Invalid stride from tile_size={self.tile_size}, overlap={self.overlap}; using stride={stride}")
+            print(f"  Invalid stride from tile_size={self.tile_size}, overlap={self.overlap}; using stride={stride}")
 
         num_tiles_y = max(1, int(np.ceil(height / stride)))
         num_tiles_x = max(1, int(np.ceil(width / stride)))
@@ -543,9 +473,7 @@ class DensityAwareTiledDetector:
         return keep
 
 
-# ============================================================
-# Semantic-Aware NMS Functions
-# ============================================================
+# NMS helpers
 
 def compute_iom(mask1: np.ndarray, mask2: np.ndarray) -> float:
     """Compute Intersection over Minimum (IoM)"""
@@ -568,8 +496,7 @@ def nms_iom_simple(
     iom_threshold: float = 0.5
 ) -> Tuple[List[np.ndarray], List[float], List[np.ndarray]]:
     """
-    Simple NMS using IoM (ORIGINAL LOGIC - for CONTAINER mode)
-    Keeps highest scoring detections, suppresses overlaps
+    Simple NMS using IoM. Keeps higher scoring detections and removes overlaps.
     """
     if len(masks) == 0:
         return [], [], []
@@ -608,7 +535,6 @@ def build_sam3_image_predictor(device_str: str = "cuda", bpe_path: str = None):
         bpe_path = "/project/advdls25/jowusu1/CountVid/sam3/assets/bpe_simple_vocab_16e6.txt.gz"
 
     checkpoint_path = "/project/advdls25/jowusu1/SAM33/sam3/sam3_fscd147_logs_long/checkpoints/checkpoint_29.pt"
-    # checkpoint_path = "/project/advdls25/jowusu1/CountVid/fscd147/sam3.pt"
     model = build_sam3_image_model(
         enable_inst_interactivity=False,
         enable_segmentation=True,
@@ -630,13 +556,11 @@ def build_sam3_image_predictor(device_str: str = "cuda", bpe_path: str = None):
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
 
-    print(f"✅ Model loaded successfully on {device}")
+    print(f"Model loaded successfully on {device}")
     return model, device
 
 
-# ============================================================
-# Full Image Processing (NEW - No Tiling)
-# ============================================================
+# Full-image pass
 
 def process_full_image(
     model,
@@ -649,18 +573,18 @@ def process_full_image(
     Process entire image without tiling (first pass for density assessment)
     """
     width, height = image.size
-    print(f"\n📸 Processing full image: {width}x{height} pixels (no tiling)")
+    print(f"\nProcessing full image: {width}x{height} pixels (no tiling)")
 
     processor = Sam3Processor(model, confidence_threshold=confidence_threshold, device=device)
     state = processor.set_image(image)
     state = processor.set_text_prompt(state=state, prompt=text_prompt)
 
     if "masks" not in state or len(state["masks"]) == 0:
-        print("   ⚠️  No detections found")
+        print("   No detections found")
         return [], [], []
 
     num_detections = len(state["masks"])
-    print(f"   ✅ Found {num_detections} initial detections")
+    print(f"   Found {num_detections} initial detections")
 
     masks = []
     scores = []
@@ -846,17 +770,14 @@ def process_image_with_density_tiling(
     roi_tile_intersection_ratio: float = 0.05,
 ) -> Tuple[List[np.ndarray], List[float], List[np.ndarray]]:
     """
-    Process image with ROI-only uniform tiling.
-    If roi_box is provided: generate uniform full-image tiles, then keep only tiles overlapping ROI.
-    If ROI is missing/weak or filters everything: fallback to full-image uniform tiling.
+    Run tiled prediction. If an ROI is available, keep only tiles that overlap it.
     """
     width, height = image.size
 
     tiled_detector = DensityAwareTiledDetector(tile_size=tile_size, overlap=overlap)
 
-    # Always generate uniform tiles over the full image (NO attention-based tiles)
     base_tiles = tiled_detector.generate_tiles(height, width, force_tiling=True)
-    total_tiles_before_roi = len(base_tiles)
+    base_tile_n = len(base_tiles)
 
     tiles = base_tiles
     if roi_box is not None:
@@ -865,27 +786,26 @@ def process_image_with_density_tiling(
             roi_box,
             min_intersection_ratio=roi_tile_intersection_ratio
         )
-        print(f"  🎯 ROI tile filtering: kept {len(tiles)}/{total_tiles_before_roi} tiles "
+        print(f"  ROI tile filtering: kept {len(tiles)}/{base_tile_n} tiles "
               f"(roi_intersection>={roi_tile_intersection_ratio:.2f})")
 
         if len(tiles) == 0:
-            print("  ⚠️ ROI filtering removed all tiles; falling back to FULL-IMAGE uniform tiling")
+            print("  ROI filtering removed all tiles; falling back to full-image tiling")
             tiles = base_tiles
         else:
-            print(f"  🎯 ROI-only tiling: {len(tiles)} tiles")
+            print(f"  ROI-only tiling: {len(tiles)} tiles")
     else:
-        print(f"  📐 No ROI provided; using FULL-IMAGE uniform tiling: {len(tiles)} tiles")
+        print(f"  No ROI provided; using full-image tiling: {len(tiles)} tiles")
 
-    # Add width/height for visualization
     if visualizer:
         for tile in tiles:
             tile['width'] = tile['x_end'] - tile['x']
             tile['height'] = tile['y_end'] - tile['y']
         visualizer.visualize_tile_grid(image, tiles)
 
-    all_detections = []
-    all_detections_by_tile = []
-    total_raw_detections = 0
+    all_dets = []
+    dets_by_tile = []
+    raw_total = 0
 
     for tile_idx, tile in enumerate(tiles):
         x_start, y_start = tile['x'], tile['y']
@@ -898,16 +818,16 @@ def process_image_with_density_tiling(
         state = processor.set_text_prompt(state=state, prompt=text_prompt)
 
         if "masks" not in state or len(state["masks"]) == 0:
-            all_detections_by_tile.append([])
+            dets_by_tile.append([])
             continue
 
-        num_tile_detections = len(state["masks"])
-        total_raw_detections += num_tile_detections
+        tile_det_n = len(state["masks"])
+        raw_total += tile_det_n
 
-        if num_tile_detections >= 190:
-            print(f"   ⚠️ Tile {tile_idx+1}/{len(tiles)} hit limit: {num_tile_detections} detections")
+        if tile_det_n >= 190:
+            print(f"   Tile {tile_idx+1}/{len(tiles)} hit limit: {tile_det_n} detections")
 
-        tile_detections = []
+        tile_dets = []
         for i in range(len(state["masks"])):
             mask = state["masks"][i]
             if isinstance(mask, torch.Tensor):
@@ -945,37 +865,37 @@ def process_image_with_density_tiling(
                 ]
             }
 
-            all_detections.append(detection)
-            tile_detections.append(detection)
+            all_dets.append(detection)
+            tile_dets.append(detection)
 
-        all_detections_by_tile.append(tile_detections)
+        dets_by_tile.append(tile_dets)
 
-    print(f"   📊 Total raw detections: {total_raw_detections}")
-    print(f"   📊 Before tile NMS: {len(all_detections)} detections")
+    print(f"   Total raw detections: {raw_total}")
+    print(f"   Before tile NMS: {len(all_dets)} detections")
 
-    if visualizer and len(all_detections_by_tile) > 0:
-        visualizer.visualize_tile_detections(image, tiles, all_detections_by_tile)
+    if visualizer and len(dets_by_tile) > 0:
+        visualizer.visualize_tile_detections(image, tiles, dets_by_tile)
 
         global_dets = []
-        for det in all_detections:
+        for det in all_dets:
             box = det['box']
             global_dets.append({'bbox': [box[0], box[1], box[2]-box[0], box[3]-box[1]]})
         visualizer.visualize_global_detections_before_merge(image, global_dets)
 
-    if len(all_detections) > 0:
-        all_detections = tiled_detector.nms_across_tiles(all_detections)
-        print(f"   📊 After tile NMS: {len(all_detections)} detections")
+    if len(all_dets) > 0:
+        all_dets = tiled_detector.nms_across_tiles(all_dets)
+        print(f"   After tile NMS: {len(all_dets)} detections")
 
-    masks = [det['mask'] for det in all_detections]
-    scores = [det['score'] for det in all_detections]
-    boxes = [det['box'] for det in all_detections]
+    masks = [det['mask'] for det in all_dets]
+    scores = [det['score'] for det in all_dets]
+    boxes = [det['box'] for det in all_dets]
 
     return masks, scores, boxes
 
 
 def apply_nms_and_filter(masks, scores, boxes, iom_threshold=0.5,
                          confidence_threshold=0.5, min_obj_area=0,
-                         apply_nms=True, roi_conf_ratio=0.9):  # ← add param
+                         apply_nms=True, roi_conf_ratio=0.9):
 
     if apply_nms and len(masks) > 0:
         nms_threshold = STRICT_NMS_THRESHOLD if USE_MERGING else iom_threshold
@@ -983,10 +903,10 @@ def apply_nms_and_filter(masks, scores, boxes, iom_threshold=0.5,
 
     count_after_nms = len(masks)   # post-NMS, pre-confidence
 
-    filtered_detections = []
-    roi_candidates = []            # ← NEW: near-miss boxes for ROI
+    filt_dets = []
+    roi_cands = []
 
-    reduced_threshold = confidence_threshold * roi_conf_ratio
+    roi_thresh = confidence_threshold * roi_conf_ratio
 
     for i in range(len(masks)):
         mask  = masks[i]
@@ -997,21 +917,19 @@ def apply_nms_and_filter(masks, scores, boxes, iom_threshold=0.5,
         if area < min_obj_area:
             continue
 
-        if score >= reduced_threshold:     # ← qualifies for ROI
-            roi_candidates.append({'mask': mask, 'box': box,
-                                   'score': score, 'area': area})
+        if score >= roi_thresh:
+            roi_cands.append({'mask': mask, 'box': box,
+                              'score': score, 'area': area})
 
-        if score >= confidence_threshold:  # ← qualifies for final count
-            filtered_detections.append({'mask': mask, 'box': box,
-                                        'score': score, 'area': area})
+        if score >= confidence_threshold:
+            filt_dets.append({'mask': mask, 'box': box,
+                              'score': score, 'area': area})
 
-    print(f"   Final count: {len(filtered_detections)}")
-    print(f"   ROI candidates (≥{reduced_threshold:.3f}): {len(roi_candidates)}")
-    return len(filtered_detections), filtered_detections, count_after_nms, roi_candidates
+    print(f"   Final count: {len(filt_dets)}")
+    print(f"   ROI candidates above {roi_thresh:.3f}: {len(roi_cands)}")
+    return len(filt_dets), filt_dets, count_after_nms, roi_cands
 
-# ============================================================
-# Main Counting Function with SMART Density Awareness (NEW)
-# ============================================================
+# Main counting flow
 
 def count_objects_in_image(
     image_path: str,
@@ -1027,45 +945,33 @@ def count_objects_in_image(
     visualizer=None,
 ) -> Tuple[int, List[Dict[str, Any]], np.ndarray]:
     """
-    Count objects with SMART DENSITY-AWARE processing
+    Count objects with density-aware processing.
 
-    NEW WORKFLOW:
+    Workflow:
     1. Run SAM3 on full image (no tiling)
-    2. Apply complete NMS & filtering on full-image results
-    3. Calculate density on CLEAN detections
-    4. If sparse → Return results (early exit)
-    5. If dense → Re-run with adaptive tiling
-
-    This ensures:
-    - Tiling decision based on ACTUAL clean objects (not raw detections)
-    - Books (6 large objects) won't trigger unnecessary tiling
-    - Dense scenes (100 strawberries) will trigger tiling
+    2. Apply NMS and confidence filtering
+    3. Estimate density from the cleaned detections
+    4. Return the full-image result or re-run with tiles
     """
 
-    # Build model
     model, device = build_sam3_image_predictor(device_str, bpe_path)
 
-    # Initialize semantic analyzer
     print("\n" + "="*70)
-    print("🧠 SMART DENSITY-AWARE OBJECT COUNTING")
+    print("Smart density-aware object counting")
     print("="*70)
 
 
-    # Load image
     image = Image.open(image_path).convert("RGB")
     frame_np = np.array(image)
     width, height = image.size
 
-    print(f"\n📐 Image: {width}x{height} pixels ({width*height:,} total)")
+    print(f"\nImage: {width}x{height} pixels ({width*height:,} total)")
 
-    # ========================================
-    # STAGE 1: FULL IMAGE PREDICTION (NO TILING)
-    # ========================================
     print("\n" + "="*70)
-    print("📸 STAGE 1: Initial Full-Image Prediction")
+    print("Stage 1: Initial full-image prediction")
     print("="*70)
 
-    masks_initial, scores_initial, boxes_initial = process_full_image(
+    init_masks, init_scores, init_boxes = process_full_image(
         model=model,
         device=device,
         image=image,
@@ -1073,19 +979,16 @@ def count_objects_in_image(
         confidence_threshold=0.0,
     )
 
-    print(f"   Raw detections: {len(masks_initial)}")
+    print(f"   Raw detections: {len(init_masks)}")
 
-    # ========================================
-    # STAGE 2: COMPLETE PROCESSING (NMS + FILTERING)
-    # ========================================
     print("\n" + "="*70)
-    print("🎨 STAGE 2: Apply NMS & Filtering to Full-Image Results")
+    print("Stage 2: Apply NMS and filtering to full-image results")
     print("="*70)
 
     num_objects_clean, detections_clean , count_after_nms , roi_candidates = apply_nms_and_filter(
-        masks=masks_initial,
-        scores=scores_initial,
-        boxes=boxes_initial,
+        masks=init_masks,
+        scores=init_scores,
+        boxes=init_boxes,
         iom_threshold=iom_threshold,
         confidence_threshold=confidence_threshold,
         min_obj_area=min_obj_area,
@@ -1095,66 +998,53 @@ def count_objects_in_image(
 
     print(f"   Clean detections after NMS: {num_objects_clean}")
 
-    # Extract clean boxes for density calculation
     boxes_clean = [det['box'] for det in detections_clean]
 
-    # ========================================
-    # STAGE 2.5: STAGE-1 QUALITY / RELIABILITY CHECK
-    # ========================================
-
-    # Use roi_candidates for ROI building (wider coverage than clean only)
     detections_for_roi = roi_candidates if len(roi_candidates) > len(detections_clean) else detections_clean
     reliability = assess_stage1_detection_reliability(
-        masks_initial=masks_initial,
-        scores_initial=scores_initial,
-        boxes_initial=boxes_initial,
+        masks_initial=init_masks,
+        scores_initial=init_scores,
+        boxes_initial=init_boxes,
         detections_clean=detections_clean,
         image_width=width,
         image_height=height, count_after_nms=count_after_nms,
     )
     print("\n" + "="*70)
-    print("🩺 STAGE 2.5: Stage-1 Reliability Check")
+    print("Stage 2.5: Stage-1 reliability check")
     print("="*70)
-    print(f"   • Reliability score: {reliability['reliability_score']:.2f}/1.0")
-    print(f"   • Raw/Clean counts: {reliability['raw_count']} / {reliability['clean_count']}")
-    print(f"   • Mean clean score: {reliability['mean_clean_score']:.3f}")
-    print(f"   • Clean/raw ratio: {reliability['clean_to_raw_ratio']:.3f}")
-    print(f"   • ROI area ratio: {reliability['roi_area_ratio']:.2%}")
-    print(f"   • ROI-tiling eligible: {'YES' if reliability['use_roi_tiling'] else 'NO'}")
+    print(f"   Reliability score: {reliability['reliability_score']:.2f}/1.0")
+    print(f"   Raw/Clean counts: {reliability['raw_count']} / {reliability['clean_count']}")
+    print(f"   Mean clean score: {reliability['mean_clean_score']:.3f}")
+    print(f"   Clean/raw ratio: {reliability['clean_to_raw_ratio']:.3f}")
+    print(f"   ROI area ratio: {reliability['roi_area_ratio']:.2%}")
+    print(f"   ROI-tiling eligible: {'YES' if reliability['use_roi_tiling'] else 'NO'}")
     for rr in reliability['reasons']:
         print(f"     - {rr}")
 
-    # ========================================
-    # STAGE 3: DENSITY ANALYSIS ON CLEAN DETECTIONS
-    # ========================================
     print("\n" + "="*70)
-    print("🧮 STAGE 3: Smart Density Analysis on Clean Detections")
+    print("Stage 3: Density analysis on clean detections")
     print("="*70)
 
     density_score, use_tiling, metrics = calculate_density_smart(
         boxes_clean, width, height
     )
     tiling_rule = metrics["tiling_rule"]  
-    print(f"\n📊 Density Metrics (based on clean detections):")
-    print(f"   • Object count: {metrics['object_count']}")
-    print(f"   • Coverage: {metrics['coverage']:.2%} of image")
-    print(f"   • Avg size: {metrics['avg_object_size_ratio']:.2%} per object")
-    print(f"   • Count score: {metrics['object_count_score']:.2f}/1.0")
-    print(f"   • Size score: {metrics['size_score']:.2f}/1.0 (1.0=small)")
-    print(f"   • Density: {density_score:.3f}")
-    print(f"\n💡 Decision: {metrics['decision']}")
+    print(f"\nDensity metrics based on clean detections:")
+    print(f"   Object count: {metrics['object_count']}")
+    print(f"   Coverage: {metrics['coverage']:.2%} of image")
+    print(f"   Avg size: {metrics['avg_object_size_ratio']:.2%} per object")
+    print(f"   Count score: {metrics['object_count_score']:.2f}/1.0")
+    print(f"   Size score: {metrics['size_score']:.2f}/1.0 (1.0=small)")
+    print(f"   Density: {density_score:.3f}")
+    print(f"\nDecision: {metrics['decision']}")
 
-    # ========================================
-    # DECISION POINT: USE FULL-IMAGE OR RE-RUN WITH TILING
-    # ========================================
     print("\n" + "="*70)
-    print("🎯 STAGE 3: Tiling Decision")
+    print("Stage 3: Tiling decision")
     print("="*70)
-    # ADD right after: density_score, use_tiling, metrics = calculate_density_smart(...)
     
     if not use_tiling and count_after_nms > 10 and num_objects_clean == 0:
-        print("⚠️  FORCE TILING: Many detections survived NMS but all failed confidence filter")
-        print(f"    After NMS: {count_after_nms}  →  After confidence filter: 0")
+        print("Force tiling: many detections survived NMS but failed the confidence filter")
+        print(f"    After NMS: {count_after_nms}; after confidence filter: 0")
         retention_rate = num_objects_clean / count_after_nms if count_after_nms > 0 else 0
         if 0.035 < retention_rate < 0.1:   # less than 3.5% survived confidence filter
             print(" low retention rate")
@@ -1167,12 +1057,10 @@ def count_objects_in_image(
         metrics['decision'] = f"Forced tiling (0/{count_after_nms} survived confidence filter)"
 
     if not use_tiling:
-        # EARLY EXIT - No tiling needed
-        print(f"\n✅ SPARSE/MODERATE SCENE")
+        print(f"\nSparse/moderate scene")
         print(f"   Using full-image results (tiling not needed)")
         print(f"   Reason: {metrics['decision']}")
 
-        # Visualization for full-image results
         if visualizer and len(detections_clean) > 0:
             final_dets = []
             for det in detections_clean:
@@ -1181,7 +1069,7 @@ def count_objects_in_image(
             visualizer.visualize_final_result(image, final_dets)
 
         print("\n" + "="*70)
-        print(f"✅ FINAL COUNT: {num_objects_clean} objects")
+        print(f"Final count: {num_objects_clean} objects")
         print(f"   Tiling used: NO")
         print(f"   Tiling rule: {tiling_rule}  ({metrics['decision']})")
         print("="*70 + "\n")
@@ -1189,14 +1077,10 @@ def count_objects_in_image(
         return num_objects_clean, detections_clean, frame_np
 
     else:
-        # DENSE SCENE - Re-run with tiling
-        print(f"\n⚠️  DENSE SCENE DETECTED!")
+        print(f"\nDense scene detected")
 
-        # ========================================
-        # STAGE 4: RE-RUN WITH ADAPTIVE TILING
-        # ========================================
         print("\n" + "="*70)
-        print("🔄 STAGE 4: Re-running with Adaptive Tiling")
+        print("Stage 4: Re-running with adaptive tiling")
         print("="*70)
 
         if tile_size == -1 or tile_size is None:
@@ -1204,19 +1088,17 @@ def count_objects_in_image(
         else:
             print(f"Manual tiling: {tile_size}px tiles, {tile_overlap}px overlap")
 
-        # If tile_size >= image dimension, shrink for proper subdivision
         min_side = min(width, height)
         while tile_size > min_side // 2 and tile_size // 2 >= 96:
             tile_size = tile_size // 2
             tile_overlap = tile_size // 4
         print(f"  Final tile config after size-check: {tile_size}px tiles, {tile_overlap}px overlap")
-            # Decide whether to tile full image attention regions or only stage-1 coverage ROI
         roi_box_for_tiling = reliability.get('roi_box') if reliability.get('use_roi_tiling', False) else None
         if roi_box_for_tiling is not None:
-            print("\n🎯 Using ROI-only tiling on stage-1 cleaned coverage region (with padding)")
+            print("\nUsing ROI-only tiling on the stage-1 coverage region")
             print(f"   ROI box: {[round(v, 1) for v in roi_box_for_tiling]}")
         else:
-            print("\n📐 Using FULL-IMAGE uniform tiling fallback (stage-1 considered weak/uncertain for ROI restriction)")
+            print("\nUsing full-image tiling fallback because stage-1 ROI is uncertain")
 
         masks_tiled, scores_tiled, boxes_tiled = process_image_with_density_tiling(
             model=model,
@@ -1233,18 +1115,13 @@ def count_objects_in_image(
 
         print(f"\n   Tiled detections: {len(masks_tiled)}")
 
-        # ========================================
-        # STAGE 5: FINAL NMS ON TILED RESULTS
-        # ========================================
         print("\n" + "="*70)
-        print("🎨 STAGE 5: Apply NMS & Filtering to Tiled Results")
+        print("Stage 5: Apply NMS and filtering to tiled results")
         print("="*70)
-        # If tiling was forced because all detections failed confidence filter,
-        # use 10% of original threshold to give low-confidence detections a chance
         if metrics['decision'].startswith("Forced tiling"):
             tiling_confidence = confidence_threshold * 0.85
-            print(f"⚠️  Forced-tiling mode: reducing confidence threshold")
-            print(f"    Original: {confidence_threshold:.3f}  →  Reduced: {tiling_confidence:.3f}")
+            print(f"Forced-tiling mode: reducing confidence threshold")
+            print(f"    Original: {confidence_threshold:.3f}; reduced: {tiling_confidence:.3f}")
         else:
             tiling_confidence = confidence_threshold
 
@@ -1258,7 +1135,6 @@ def count_objects_in_image(
             apply_nms=apply_nms,
         )
 
-        # Visualization
         if visualizer and len(detections_final) > 0:
             final_dets = []
             for det in detections_final:
@@ -1267,7 +1143,7 @@ def count_objects_in_image(
             visualizer.visualize_final_result(image, final_dets)
 
         print("\n" + "="*70)
-        print(f"✅ FINAL COUNT: {num_objects_final} objects")
+        print(f"Final count: {num_objects_final} objects")
         print(f"   Tiling used: YES")
 
         print(f"   Improvement: {num_objects_final - num_objects_clean} more objects detected")
@@ -1363,7 +1239,7 @@ def visualize_detections_on_image(
     draw.text((pad, pad), text, fill=(255, 255, 255), font=font)
 
     pil_vis.save(save_path)
-    print(f"🖼️ Saved visualization: {save_path}")
+    print(f"Saved visualization: {save_path}")
 
 
 def update_counts_json(output_file: str, image_path: str, input_text: str, num_objects: int):
@@ -1388,7 +1264,7 @@ def update_counts_json(output_file: str, image_path: str, input_text: str, num_o
     with open(output_file, "w") as f:
         json.dump(data, f, indent=2)
 
-    print(f"📁 Updated counts JSON: {output_file}")
+    print(f"Updated counts JSON: {output_file}")
 
 # ============================================================
 # CLI Interface
@@ -1429,19 +1305,19 @@ def main():
 
     device_str = args.device
     if args.device == "cuda" and not torch.cuda.is_available():
-        print("⚠️ CUDA not available; falling back to CPU.")
+        print("CUDA not available; falling back to CPU.")
         device_str = "cpu"
 
     print("\n" + "=" * 70)
     print("SAM3 with ROI-ONLY / FULL-IMAGE UNIFORM DENSITY-AWARE TILING & SEMANTIC NMS")
     print("=" * 70)
-    print(f"📷 Image : {args.image_path}")
-    print(f"📝 Prompt : '{args.input_text}'")
-    print(f"💻 Device : {device_str}")
-    print(f"🔲 Tile Size : {args.tile_size}")
-    print(f"🔗 Tile Overlap: {args.tile_overlap}")
-    print(f"⚙️ Confidence : {args.confidence_threshold}")
-    print(f"🎯 Semantic NMS: {'Enabled (IoM=' + str(args.iom_threshold) + ')' if not args.no_nms else 'Disabled'}")
+    print(f"Image: {args.image_path}")
+    print(f"Prompt: '{args.input_text}'")
+    print(f"Device: {device_str}")
+    print(f"Tile size: {args.tile_size}")
+    print(f"Tile overlap: {args.tile_overlap}")
+    print(f"Confidence: {args.confidence_threshold}")
+    print(f"Semantic NMS: {'Enabled (IoM=' + str(args.iom_threshold) + ')' if not args.no_nms else 'Disabled'}")
     print("=" * 70)
 
     visualizer = None
@@ -1467,7 +1343,7 @@ def main():
     )
 
     print("\n" + "=" * 70)
-    print(f"✅ Final Count: {num_objects}")
+    print(f"Final count: {num_objects}")
     print("=" * 70)
 
     if detections:
@@ -1482,7 +1358,7 @@ def main():
         vis_path = args.vis_path if args.vis_path else os.path.splitext(args.image_path)[0] + "_hybrid_semantic_vis.png"
         visualize_detections_on_image(frame_np, detections, num_objects, vis_path, args.show_id, args.id_font_size)
 
-    print("\n✅ Done!\n")
+    print("\nDone.\n")
 
 
 
