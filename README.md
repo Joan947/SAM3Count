@@ -75,15 +75,15 @@ and check the official repo for any FAQS with regard to SAM3.
 Download the official SAM3 checkpoint [here](https://huggingface.co/facebook/sam3/blob/main/sam3.pt) and the fine tuned checkpoint and place it inside the `checkpoints` directory.
 
 ```bash
+cd ..
 mkdir -p checkpoints
 ```
 
-Fine-tuned SAM3Count checkpoint for dense image counting is found [here](https://drive.google.com/file/d/1uSpEeM9l9SN_Q_W-CJqYy75mQ-O75HpL/view?usp=drive_link)
+Fine-tuned SAM3Count checkpoint for dense image counting on FSCD 147 and ShangaiTech like images can found be [here](https://drive.google.com/file/d/1uSpEeM9l9SN_Q_W-CJqYy75mQ-O75HpL/view?usp=drive_link)
 
 
 
-
-<!-- ## Repository Structure
+## Repository Structure
 
 ```bash
 SAM3Count/
@@ -97,8 +97,7 @@ SAM3Count/
 ├── data/    # datasets
 ├── sam3/    # official SAM3 repo
 └── README.md
-``` -->
-
+```
 
 
 ## Demo
@@ -106,13 +105,13 @@ SAM3Count/
 ### Image demo
 
 ```bash
-python sam3count_images.py --image_path examples/images/demo.jpg --input_text "bird" --save_vis --show_id
+python sam3count_images.py --image_path examples/images/demo.jpg --input_text "bird" --save_vis --show_id --output_dir outputs
 ```
 
 ### Video demo
 
 ```bash
-python sam3count_videos.py --video_dir examples/video --input_text "car" --output_dir outputs 
+python sam3count_videos.py --video_dir examples/video --input_text "car" --save_final_video --output_dir outputs 
 ```
 
 
@@ -130,12 +129,12 @@ python scripts/evaluate_pixmo.py --benchmark_file data/pixmo_test.json --output_
 ```bash
 python scripts/evaluate_fscd147.py --json_path fscd147/instances_val_remapped.json --images_dir data/FSC147_384_V2/images_384_VarV2 --num_gpus 2 
 ``` -->
-<!-- 
+
 ### OmniCount evaluation
 
 ```bash
 python scripts/evaluate_omnicount.py --json_path data/OmniCount-191/Fruits/test/_annotations.coco.json --images_dir data/OmniCount-191/Fruits/test --num_gpus 4 
-``` -->
+```
 
 ### ShanghaiTech evaluation
 

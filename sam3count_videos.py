@@ -1,4 +1,9 @@
+import sys
 import os
+# Ensure the real sam3 package (with __init__.py) is found before the
+# namespace package at SAM3Count/sam3/ shadows it.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sam3"))
+
 import re
 import json
 import argparse
@@ -1099,6 +1104,8 @@ def get_curr_count(frame_idx, T):
 
 
 def render_final_video(video_dir, frame_names, T, output_path, fps, font_size=8):
+    import subprocess
+
     if len(frame_names) == 0:
         return
 
@@ -1108,7 +1115,10 @@ def render_final_video(video_dir, frame_names, T, output_path, fps, font_size=8)
         return
 
     height, width = first.shape[:2]
-    writer = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
+    raw_path = os.path.splitext(output_path)[0] + "_raw.mp4"
+    writer = cv2.VideoWriter(raw_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
+    if not writer.isOpened():
+        raise RuntimeError(f"Could not open video writer for {raw_path}")
 
     rng = np.random.default_rng(0)
     colors = {obj_id: tuple(map(int, rng.integers(0, 256, size=3))) for obj_id in T.keys()}
@@ -1117,8 +1127,7 @@ def render_final_video(video_dir, frame_names, T, output_path, fps, font_size=8)
     for frame_idx, fname in enumerate(frame_names):
         img = cv2.imread(os.path.join(video_dir, fname))
         if img is None:
-            print(f" Could not read first frame in {video_dir}")
-        
+            print(f" Could not read frame {fname} in {video_dir}")
             continue
 
         overlay = img.copy()
@@ -1145,7 +1154,27 @@ def render_final_video(video_dir, frame_names, T, output_path, fps, font_size=8)
         writer.write(blended)
 
     writer.release()
-    print(f" Saved: {output_path}")
+
+    h264_path = os.path.splitext(output_path)[0] + ".mp4"
+    result = subprocess.run(
+        [
+            "ffmpeg", "-y",
+            "-i", raw_path,
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+            h264_path,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        os.remove(raw_path)
+        print(f" Saved: {h264_path}")
+    else:
+        print(f" ffmpeg conversion failed (returncode={result.returncode}); keeping raw file: {raw_path}")
+        print(result.stderr[-500:] if result.stderr else "")
 
 
 def save_T_npz(T, path):
@@ -1181,7 +1210,7 @@ def update_counts_json(output_file, orig_vid_dir, input_text, num_objects):
 def get_args_parser():
     parser = argparse.ArgumentParser("SAM3 Conservative Multi-Modal Tracking")
     parser.add_argument("--sam3_checkpoint", type=str, 
-                       default="/cluster/medbow/project/advdls25/jowusu1/CountVid/countvid/lib/python3.10/site-packages/assets/sam3.pt")
+                       default="checkpoints/sam3.pt")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--font_size", type=int, default=8)
     parser.add_argument("--min_obj_area", type=int, default=0)

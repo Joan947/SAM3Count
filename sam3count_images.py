@@ -25,6 +25,16 @@ from sam3.sam3 import build_sam3_image_model
 from sam3.sam3.model.sam3_image_processor import Sam3Processor
 from sam3.sam3.model.box_ops import box_xywh_to_cxcywh, box_cxcywh_to_xyxy
 from sam3.sam3.visualization_utils import normalize_bbox
+import sam3.model.vitdet as _vitdet_module
+from sam3.perflib.fused import addmm_act as _orig_addmm_act
+
+# addmm_act always returns bfloat16 but fc2 has float32 weights.
+# Patching the module-level name ensures Mlp.forward picks up the fix at call time.
+def _safe_addmm_act(activation, linear, mat1):
+    orig_dtype = mat1.dtype
+    return _orig_addmm_act(activation, linear, mat1).to(orig_dtype)
+
+_vitdet_module.addmm_act = _safe_addmm_act
 
 # Basic settings
 USE_MERGING = False
@@ -1283,13 +1293,14 @@ def get_args_parser():
     parser.add_argument("--bpe_path", type=str, default=None, help="BPE vocab path")
     parser.add_argument("--tile_size", type=int, default=-1, help="Tile size in pixels. Use -1 for adaptive tiling (default: -1 = adaptive)")
     parser.add_argument("--tile_overlap", type=int, default=-1, help="Tile overlap in pixels. Use -1 for adaptive (default: -1 = adaptive)")
-    parser.add_argument("--confidence_threshold", type=float, default=0.5, help="Min confidence (default: 0.25)")
+    parser.add_argument("--confidence_threshold", type=float, default=0.35, help="Min confidence (default: 0.25)")
     parser.add_argument("--min_obj_area", type=int, default=0, help="Min pixel area (default: 0)")
     parser.add_argument("--iom_threshold", type=float, default=0.5, help="IoM threshold for NMS (default: 0.3)")
 
+    parser.add_argument("--output_dir", type=str, default="", help="Directory to save all outputs (vis image + stage plots)")
     parser.add_argument("--no_nms", action="store_true", help="Disable NMS")
     parser.add_argument("--save_vis", action="store_true", help="Save visualization image")
-    parser.add_argument("--vis_path", type=str, default="", help="Visualization output path")
+    parser.add_argument("--vis_path", type=str, default="", help="Visualization output path (overrides --output_dir)")
     parser.add_argument("--show_id", action="store_true", help="Show ID numbers on visualization")
     parser.add_argument("--id_font_size", type=int, default=18, help="ID font size (default: 18)")
 
@@ -1320,10 +1331,15 @@ def main():
     print(f"Semantic NMS: {'Enabled (IoM=' + str(args.iom_threshold) + ')' if not args.no_nms else 'Disabled'}")
     print("=" * 70)
 
+    if args.output_dir:
+        os.makedirs(args.output_dir, exist_ok=True)
+
     visualizer = None
     if ENABLE_VISUALIZATION:
         if args.vis_path:
             vis_dir = os.path.join(args.vis_path if os.path.isdir(args.vis_path) else os.path.dirname(args.vis_path) or '.', 'visualization_semantic_aware')
+        elif args.output_dir:
+            vis_dir = os.path.join(args.output_dir, 'visualization_semantic_aware')
         else:
             vis_dir = os.path.join(os.path.dirname(args.image_path) or '.', 'visualization_semantic_aware')
         visualizer = VisualizationHelper(output_dir=vis_dir)
@@ -1355,7 +1371,13 @@ def main():
         update_counts_json(args.output_file, args.image_path, args.input_text, num_objects)
 
     if args.save_vis:
-        vis_path = args.vis_path if args.vis_path else os.path.splitext(args.image_path)[0] + "_hybrid_semantic_vis.png"
+        if args.vis_path:
+            vis_path = args.vis_path
+        elif args.output_dir:
+            stem = os.path.splitext(os.path.basename(args.image_path))[0]
+            vis_path = os.path.join(args.output_dir, stem + "_vis.png")
+        else:
+            vis_path = os.path.splitext(args.image_path)[0] + "_hybrid_semantic_vis.png"
         visualize_detections_on_image(frame_np, detections, num_objects, vis_path, args.show_id, args.id_font_size)
 
     print("\nDone.\n")
