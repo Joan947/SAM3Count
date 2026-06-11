@@ -543,15 +543,19 @@ def build_sam3_image_predictor(device_str: str = "cuda", bpe_path: str = None):
 
     if bpe_path is None:
         bpe_path = "/project/advdls25/jowusu1/CountVid/sam3/assets/bpe_simple_vocab_16e6.txt.gz"
+    
+    
+    # use finetuned checkpoint here for denser scenes like those in FSCD-147 scenarios else use the normal SAM3 checkpoint for more general scenarios. The finetuned checkpoint is trained on a mix of FSCD-147 and synthetic high-density data, so it may perform better in very crowded scenes but could be less precise in sparse scenes.
+    checkpoint_path = "checkpoints/sam3_ft.pt"
 
-    checkpoint_path = "/project/advdls25/jowusu1/SAM33/sam3/sam3_fscd147_logs_long/checkpoints/checkpoint_29.pt"
+    #use the normal SAM3 checkpoint here for building model 
     model = build_sam3_image_model(
         enable_inst_interactivity=False,
         enable_segmentation=True,
         bpe_path=bpe_path,
         eval_mode=True,
         load_from_HF=True,
-        checkpoint_path="/project/advdls25/jowusu1/CountVid/fscd147/sam3.pt",
+        checkpoint_path="checkpoints/sam3.pt",
     )
 
     checkpoint = torch.load(checkpoint_path, map_location="cpu")

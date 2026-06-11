@@ -72,7 +72,7 @@ and check the official repo for any FAQS with regard to SAM3.
 
 ### 3. Download checkpoints
 
-Download the official SAM3 checkpoint [here](https://huggingface.co/facebook/sam3/blob/main/sam3.pt) and the fine tuned checkpoint and place it inside the `checkpoints` directory.
+Download the official SAM3 checkpoint [here](https://huggingface.co/facebook/sam3/blob/main/sam3.pt) and the fine tuned checkpoint and place it inside the `checkpoints` directory. Be sure to use the correct checkpoint file path in the scripts.
 
 ```bash
 cd ..
