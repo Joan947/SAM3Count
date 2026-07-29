@@ -81,7 +81,13 @@ mkdir -p checkpoints
 
 Fine-tuned SAM3Count checkpoint for dense image counting on FSCD 147 and ShangaiTech like images can found be [here](https://drive.google.com/file/d/1uSpEeM9l9SN_Q_W-CJqYy75mQ-O75HpL/view?usp=drive_link)
 
+## Finetuning
 
+For training code and the official training workflow, please visit the SAM3 training guide: [https://github.com/facebookresearch/sam3/blob/main/README_TRAIN.md](https://github.com/facebookresearch/sam3/blob/main/README_TRAIN.md).
+
+To reproduce the fine-tuning setup used in SAM3Count, follow the instructions on that page but use the configuration settings from [scripts/ft_config.yaml](scripts/ft_config.yaml) as the base configuration for finetuning.
+
+As pointed out in the SAM3 paper, for object counting tasks the model's presence score should be disabled before training, inference and demos. This is important for obtaining accurate counts and reproducing the reported results.
 
 ## Repository Structure
 
@@ -124,11 +130,11 @@ python scripts/evaluate_pixmo.py --benchmark_file data/pixmo_test.json --output_
 
 ``` -->
 
-<!-- ### FSCD-147 evaluation
+### FSCD-147 evaluation
 
 ```bash
-python scripts/evaluate_fscd147.py --json_path fscd147/instances_val_remapped.json --images_dir data/FSC147_384_V2/images_384_VarV2 --num_gpus 2 
-``` -->
+python scripts/evaluate_fscd147.py --json_path data/FSCD-147/instances_val.json --images_dir data/FSC147_384_V2/images_384_VarV2 --num_gpus 2 
+```
 
 ### OmniCount evaluation
 
@@ -156,13 +162,13 @@ python scripts/evaluate_carpk.py --dataset_root data/CARPK/data --split test --n
 
 ```
 
-<!-- ### TAO-Count evaluation
+### TAO-Count evaluation
 
 ```bash
 python scripts/evaluate_tao_count.py --output_file outputs/tao_count/predictions.json --data_dir data/TAO-Count --downsample_factor 2.0
 
 python scripts/evaluate_counting.py --ground_truth data/VideoCount/TAO-Count/anno/TAO-count-gt.json --predicted outputs/tao_count/predictions.json  --parent_dir data/VideoCount/TAO-Count/frames
-``` -->
+```
 
 ### Penguin evaluation
 ```bash

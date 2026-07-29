@@ -1115,10 +1115,25 @@ def render_final_video(video_dir, frame_names, T, output_path, fps, font_size=8)
         return
 
     height, width = first.shape[:2]
-    raw_path = os.path.splitext(output_path)[0] + "_raw.mp4"
-    writer = cv2.VideoWriter(raw_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
-    if not writer.isOpened():
-        raise RuntimeError(f"Could not open video writer for {raw_path}")
+    h264_path = os.path.splitext(output_path)[0] + ".mp4"
+
+    ffmpeg_proc = subprocess.Popen(
+        [
+            "ffmpeg", "-y",
+            "-f", "rawvideo",
+            "-vcodec", "rawvideo",
+            "-pix_fmt", "bgr24",
+            "-s", f"{width}x{height}",
+            "-r", str(fps),
+            "-i", "pipe:0",
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+            h264_path,
+        ],
+        stdin=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
 
     rng = np.random.default_rng(0)
     colors = {obj_id: tuple(map(int, rng.integers(0, 256, size=3))) for obj_id in T.keys()}
@@ -1151,30 +1166,16 @@ def render_final_video(video_dir, frame_names, T, output_path, fps, font_size=8)
             cv2.rectangle(blended, (x, y - th - bl), (x + tw, y + bl), (0, 0, 0), -1)
             cv2.putText(blended, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), 2, cv2.LINE_AA)
 
-        writer.write(blended)
+        ffmpeg_proc.stdin.write(blended.tobytes())
 
-    writer.release()
-
-    h264_path = os.path.splitext(output_path)[0] + ".mp4"
-    result = subprocess.run(
-        [
-            "ffmpeg", "-y",
-            "-i", raw_path,
-            "-c:v", "libx264",
-            "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart",
-            h264_path,
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode == 0:
-        os.remove(raw_path)
+    ffmpeg_proc.stdin.close()
+    stderr = ffmpeg_proc.stderr.read()
+    returncode = ffmpeg_proc.wait()
+    if returncode == 0:
         print(f" Saved: {h264_path}")
     else:
-        print(f" ffmpeg conversion failed (returncode={result.returncode}); keeping raw file: {raw_path}")
-        print(result.stderr[-500:] if result.stderr else "")
+        print(f" ffmpeg failed (returncode={returncode})")
+        print(stderr.decode()[-500:] if stderr else "")
 
 
 def save_T_npz(T, path):
